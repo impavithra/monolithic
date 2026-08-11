@@ -7,16 +7,17 @@ pool:
 steps:
 
 - script: |
-    sudo apt-get update
-    sudo apt-get install -y mysql-server
-
     sudo systemctl start mysql
-    sudo systemctl status mysql --no-pager
 
-    sudo mysql -e "CREATE DATABASE IF NOT EXISTS snowman;"
-    sudo mysql -e "CREATE USER IF NOT EXISTS 'username'@'localhost' IDENTIFIED BY 'password';"
-    sudo mysql -e "GRANT ALL PRIVILEGES ON snowman.* TO 'username'@'localhost';"
-    sudo mysql -e "FLUSH PRIVILEGES;"
+    sudo mysqladmin -u root password 'root'
+
+    mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS snowman;"
+    mysql -uroot -proot -e "CREATE USER IF NOT EXISTS 'username'@'localhost' IDENTIFIED BY 'password';"
+    mysql -uroot -proot -e "ALTER USER 'username'@'localhost' IDENTIFIED BY 'password';"
+    mysql -uroot -proot -e "GRANT ALL PRIVILEGES ON snowman.* TO 'username'@'localhost';"
+    mysql -uroot -proot -e "FLUSH PRIVILEGES;"
+
+    mysql -uusername -ppassword -e "SHOW DATABASES;"
   displayName: 'Setup MySQL'
 
 - task: Maven@3
