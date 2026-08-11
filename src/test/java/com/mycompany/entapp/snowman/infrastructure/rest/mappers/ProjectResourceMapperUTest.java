@@ -11,9 +11,12 @@ import org.joda.time.DateTime;
 import org.junit.Test;
 
 import java.util.Date;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.assertTrue;
 
 public class ProjectResourceMapperUTest {
 
@@ -56,10 +59,32 @@ public class ProjectResourceMapperUTest {
         assertEquals(dateStarted, projectResource.getDateStarted());
         assertEquals(dateEnded, projectResource.getDateEnded());
     }
-
     @Test
-    public void testMapToProjects() throws Exception {
-        fail("To be Implemented");
-    }
+public void testMapToProjects() throws Exception {
+    ProjectResource projectResource1 = new ProjectResource();
+    projectResource1.setProjectId(1);
+    projectResource1.setTitle("Project 1");
 
+    ProjectResource projectResource2 = new ProjectResource();
+    projectResource2.setProjectId(2);
+    projectResource2.setTitle("Project 2");
+
+    List<ProjectResource> resources =
+            Arrays.asList(projectResource1, projectResource2);
+
+    Set<Project> projects =
+            ProjectResourceMapper.mapToProjects(resources);
+
+    assertEquals(2, projects.size());
+
+    assertTrue(projects.stream().anyMatch(
+            p -> p.getId() == 1 &&
+                 "Project 1".equals(p.getProjectTitle())
+    ));
+
+    assertTrue(projects.stream().anyMatch(
+            p -> p.getId() == 2 &&
+                 "Project 2".equals(p.getProjectTitle())
+    ));
+}
 }

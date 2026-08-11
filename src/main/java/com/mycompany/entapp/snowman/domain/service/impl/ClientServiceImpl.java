@@ -41,9 +41,11 @@ public class ClientServiceImpl implements ClientService {
     @Override
     public Client getClient(int clientId) {
         Client client = clientRepository.getClient(clientId);
-
+         
         LOG.info("Retrieved client: {}", client);
-
+        if (client == null) {
+           return null;
+        }
         if (client.getProjects().isEmpty()) {
             // call Client System REST endpoint to get its project data.
 
@@ -86,7 +88,7 @@ public class ClientServiceImpl implements ClientService {
     public void createClient(Client client) throws SnowmanException {
 
         LOG.info("Creating client {}", client);
-
+         
         if (getClient(client.getId()) != null) {
             throw new SnowmanException("Client already exists");
         }

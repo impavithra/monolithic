@@ -68,17 +68,15 @@ public class UserServiceImplUTest {
     }
 
     @Test
-    public void testDeleteUser(){
-        int userId = 1;
-        User user = getUser(1);
+public void testDeleteUser() {
+    int userId = 1;
 
-        Mockito.doNothing().when(userDao).removeUser(userId);
+    Mockito.doNothing().when(userDao).removeUser(userId);
 
-        userService.deleteUser(userId);
+    userService.deleteUser(userId);
 
-        Mockito.verify(userService, Mockito.times(1)).deleteUser(userId);
-    }
-
+    Mockito.verify(userDao, Mockito.times(1)).removeUser(userId);
+}
     private User getUser(int userId) {
         User user = new User();
         user.setUserId(userId);

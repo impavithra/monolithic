@@ -1,10 +1,8 @@
-/*
- * |-------------------------------------------------
- * | Copyright © 2018 Colin But. All rights reserved.
- * |-------------------------------------------------
- */
 package com.mycompany.entapp.snowman.domain.service.impl;
 
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.RestTemplate;
 import com.mycompany.entapp.snowman.domain.exception.SnowmanException;
 import com.mycompany.entapp.snowman.domain.model.Client;
 import com.mycompany.entapp.snowman.domain.model.Project;
@@ -15,6 +13,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.Spy;
 
 import java.util.Collections;
 
@@ -27,6 +26,10 @@ public class ClientServiceImplUTest {
     @Mock
     private ClientRepository clientRepository;
 
+    @Mock
+    private RestTemplate restTemplate;
+    
+    @Spy
     @InjectMocks
     private ClientServiceImpl classUnderTest = new ClientServiceImpl();
 
@@ -37,6 +40,13 @@ public class ClientServiceImplUTest {
         Client client = getClient();
 
         Mockito.when(clientRepository.getClient(clientId)).thenReturn(client);
+        ResponseEntity<String> response =
+                new ResponseEntity<>("{}", HttpStatus.OK);
+
+        Mockito.when(restTemplate.getForEntity(
+                Mockito.anyString(),
+                Mockito.eq(String.class)
+        )).thenReturn(response);
 
         Client actualClient = classUnderTest.getClient(clientId);
 
@@ -44,17 +54,20 @@ public class ClientServiceImplUTest {
         assertEquals(client, actualClient);
         Mockito.verify(clientRepository, times(1)).getClient(clientId);
     }
-
+    
     @Test
     public void testCreateClient() throws Exception {
-        Client client = getClient();
+         Client client = getClient();
 
-        Mockito.when(clientRepository.getClient(client.getId())).thenReturn(client);
-        Mockito.doNothing().when(clientRepository).createClient(client);
+         // Make sure getClient() does not call RestTemplate
+         client.setProjects(Collections.singleton(new Project()));
 
-        classUnderTest.createClient(client);
+         Mockito.when(clientRepository.getClient(client.getId())).thenReturn(null);
+         Mockito.doNothing().when(clientRepository).createClient(client);
 
-        Mockito.verify(clientRepository, times(1)).createClient(client);
+         classUnderTest.createClient(client);
+
+         Mockito.verify(clientRepository, times(1)).createClient(client);
     }
 
     @Test(expected = SnowmanException.class)
@@ -62,33 +75,41 @@ public class ClientServiceImplUTest {
         Client client = getClient();
 
         Mockito.when(clientRepository.getClient(client.getId())).thenReturn(client);
-        classUnderTest.createClient(client);
+ 
+       // Client has projects, so getClient() will not call RestTemplate
+       client.setProjects(Collections.singleton(new Project()));
+
+       classUnderTest.createClient(client);
     }
 
+
+     @Test
+public void testUpdateClient() throws Exception {
+    Client client = getClient();
+
+    client.setProjects(Collections.singleton(new Project()));
+
+    Mockito.when(clientRepository.getClient(client.getId())).thenReturn(client);
+    Mockito.doNothing().when(clientRepository).updateClient(client);
+
+    classUnderTest.updateClient(client);
+
+    Mockito.verify(clientRepository, times(1)).updateClient(client);
+}
     @Test
-    public void testUpdateClient() throws Exception {
-        Client client = getClient();
+public void testDeleteClient() throws Exception {
+    int clientId = 1;
 
-        Mockito.when(clientRepository.getClient(client.getId())).thenReturn(client);
-        Mockito.doNothing().when(clientRepository).updateClient(client);
+    Client client = getClient();
+    client.setProjects(Collections.singleton(new Project()));
 
-        classUnderTest.updateClient(client);
+    Mockito.when(clientRepository.getClient(clientId)).thenReturn(client);
+    Mockito.doNothing().when(clientRepository).deleteClient(clientId);
 
-        Mockito.verify(clientRepository, times(1)).updateClient(client);
-    }
+    classUnderTest.deleteClient(clientId);
 
-    @Test
-    public void testDeleteClient() throws Exception {
-        int clientId = 1;
-
-        Mockito.when(clientRepository.getClient(clientId)).thenReturn(new Client());
-        Mockito.doNothing().when(clientRepository).deleteClient(clientId);
-
-        classUnderTest.deleteClient(clientId);
-
-        Mockito.verify(clientRepository, times(1)).deleteClient(clientId);
-    }
-
+    Mockito.verify(clientRepository, times(1)).deleteClient(clientId);
+}
     @Test(expected = SnowmanException.class)
     public void testDeleteClientThrowException_whenNothingToDelete() throws SnowmanException {
         int clientId = 1;

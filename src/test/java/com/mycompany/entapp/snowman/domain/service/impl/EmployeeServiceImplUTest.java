@@ -54,7 +54,7 @@ public class EmployeeServiceImplUTest {
     @Test
     public void testUpdateEmployeeShouldUpdateEmployee() {
         Employee employee = EmployeeTestHelper.getEmployee();
-
+        employee.setId(EMPLOYEE_ID);
         Mockito.when(employeeRepository.findEmployee(EMPLOYEE_ID)).thenReturn(employee);
         Mockito.doNothing().when(employeeRepository).saveEmployee(employee);
 
@@ -72,19 +72,19 @@ public class EmployeeServiceImplUTest {
     }
 
     @Test
-    public void testDeleteEmployeeShouldDeleteEmployee() {
-        Employee employee = EmployeeTestHelper.getEmployee();
+public void testDeleteEmployeeShouldDeleteEmployee() {
+    Employee employee = EmployeeTestHelper.getEmployee();
+    employee.setId(EMPLOYEE_ID);
 
-        Mockito.when(employeeRepository.findEmployee(EMPLOYEE_ID)).thenReturn(employee);
-        Mockito.doNothing().when(employeeRepository).removeEmployee(EMPLOYEE_ID);
+    Mockito.when(employeeRepository.findEmployee(EMPLOYEE_ID)).thenReturn(employee);
+    Mockito.doNothing().when(employeeRepository).removeEmployee(EMPLOYEE_ID);
 
-        classUnderTest.deleteEmployee(EMPLOYEE_ID);
+    classUnderTest.deleteEmployee(EMPLOYEE_ID);
 
-        Mockito.verify(employeeRepository, Mockito.times(1)).findEmployee(EMPLOYEE_ID);
-        Mockito.verify(employeeRepository, Mockito.times(1)).removeEmployee(EMPLOYEE_ID);
-    }
-
-    @Test
+    Mockito.verify(employeeRepository, Mockito.times(1)).findEmployee(EMPLOYEE_ID);
+    Mockito.verify(employeeRepository, Mockito.times(1)).removeEmployee(EMPLOYEE_ID);
+}
+    @Test(expected = RuntimeException.class)
     public void testDeleteEmployeeShouldThrowExceptionWhenNoExistingEmployeeFound() {
         Mockito.when(employeeRepository.findEmployee(EMPLOYEE_ID)).thenReturn(null);
         classUnderTest.deleteEmployee(EMPLOYEE_ID);

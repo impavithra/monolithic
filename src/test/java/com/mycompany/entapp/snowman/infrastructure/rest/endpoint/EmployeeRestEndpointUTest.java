@@ -32,54 +32,85 @@ public class EmployeeRestEndpointUTest {
     @InjectMocks
     private EmployeeRestEndpoint systemUnderTest = new EmployeeRestEndpoint();
 
-    @Test
-    public void testGetEmployeeShouldGetEmployee() {
-        Integer employeeId = 5;
+   
+@Test
+public void testGetEmployeeShouldGetEmployee() {
+    Integer employeeId = 5;
 
-        Employee employee = new Employee();
-        EmployeeResource employeeResource = new EmployeeResource();
+    Employee employee = new Employee();
+    EmployeeResource employeeResource = new EmployeeResource();
 
-        PowerMockito.when(EmployeeResourceMapper.mapEmployeeToEmployeeResource(employee)).thenReturn(employeeResource);
+    Mockito.when(employeeService.getEmployee(employeeId))
+            .thenReturn(employee);
 
-        ResponseEntity<EmployeeResource> responseEntity = systemUnderTest.getEmployee(employeeId);
+    PowerMockito.mockStatic(EmployeeResourceMapper.class);
 
-        assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
-        assertEquals(employeeResource, responseEntity.getBody());
-    }
+    PowerMockito.when(
+            EmployeeResourceMapper.mapEmployeeToEmployeeResource(employee)
+    ).thenReturn(employeeResource);
 
-    @Test
-    public void testCreateEmployeeShouldCreateEmployee() {
-        PowerMockito.mockStatic(EmployeeResourceMapper.class);
+    ResponseEntity<EmployeeResource> responseEntity =
+            systemUnderTest.getEmployee(employeeId);
 
-        Employee employee = new Employee();
+    assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
+    assertEquals(employeeResource, responseEntity.getBody());
 
-        EmployeeResource employeeResource = new EmployeeResource();
+    Mockito.verify(employeeService, Mockito.times(1))
+            .getEmployee(employeeId);
 
-        PowerMockito.when(EmployeeResourceMapper.mapEmployeeResourceToEmployee(employeeResource)).thenReturn(employee);
-        Mockito.doNothing().when(employeeService).createEmployee(employee);
+    PowerMockito.verifyStatic(EmployeeResourceMapper.class);
+    EmployeeResourceMapper.mapEmployeeToEmployeeResource(employee);
+}
+  
+@Test
+public void testCreateEmployeeShouldCreateEmployee() {
+    PowerMockito.mockStatic(EmployeeResourceMapper.class);
 
-        systemUnderTest.createEmployee(employeeResource);
+    Employee employee = new Employee();
+    EmployeeResource employeeResource = new EmployeeResource();
 
-        PowerMockito.verifyStatic(EmployeeResourceMapper.class);
-        Mockito.verify(employeeService, Mockito.times(1)).createEmployee(employee);
-    }
+    PowerMockito.when(
+            EmployeeResourceMapper.mapEmployeeResourceToEmployee(employeeResource)
+    ).thenReturn(employee);
 
-    @Test
-    public void testUpdateExistingEmployeeShouldUpdateExistingEmployee() {
-        PowerMockito.mockStatic(EmployeeResourceMapper.class);
+    Mockito.doNothing().when(employeeService).createEmployee(employee);
 
-        Employee employee = new Employee();
+    // Execute
+    systemUnderTest.createEmployee(employeeResource);
 
-        EmployeeResource employeeResource = new EmployeeResource();
+    // Verify static mapper call
+    PowerMockito.verifyStatic(EmployeeResourceMapper.class);
+    EmployeeResourceMapper.mapEmployeeResourceToEmployee(employeeResource);
 
-        PowerMockito.when(EmployeeResourceMapper.mapEmployeeResourceToEmployee(employeeResource)).thenReturn(employee);
-        Mockito.doNothing().when(employeeService).updateEmployee(employee);
+    // Verify service call
+    Mockito.verify(employeeService, Mockito.times(1))
+            .createEmployee(employee);
+}
 
-        systemUnderTest.updateExistingEmployee(employeeResource);
+@Test
+public void testUpdateExistingEmployeeShouldUpdateExistingEmployee() {
+    PowerMockito.mockStatic(EmployeeResourceMapper.class);
 
-        PowerMockito.verifyStatic(EmployeeResourceMapper.class);
-        Mockito.verify(employeeService, Mockito.times(1)).updateEmployee(employee);
-    }
+    Employee employee = new Employee();
+    EmployeeResource employeeResource = new EmployeeResource();
+
+    PowerMockito.when(
+            EmployeeResourceMapper.mapEmployeeResourceToEmployee(employeeResource)
+    ).thenReturn(employee);
+
+    Mockito.doNothing().when(employeeService).updateEmployee(employee);
+
+    // Execute
+    systemUnderTest.updateExistingEmployee(employeeResource);
+
+    // Verify static mapper call
+    PowerMockito.verifyStatic(EmployeeResourceMapper.class);
+    EmployeeResourceMapper.mapEmployeeResourceToEmployee(employeeResource);
+
+    // Verify service call
+    Mockito.verify(employeeService, Mockito.times(1))
+            .updateEmployee(employee);
+}
 
     @Test
     public void testDeleteEmployeeShouldDeleteEmployee(){
