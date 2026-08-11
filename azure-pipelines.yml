@@ -6,10 +6,12 @@ pool:
 
 stages:
 
-# ================= CI =================
+# =====================================================
+# CI - BUILD, TEST AND SONARQUBE
+# =====================================================
 
 - stage: Build
-  displayName: 'Build and Test'
+  displayName: 'Build, Test and SonarQube'
 
   jobs:
   - job: Build
@@ -17,7 +19,10 @@ stages:
 
     steps:
 
+    # -------------------------------
     # Setup MySQL
+    # -------------------------------
+
     - script: |
         sudo systemctl start mysql
 
@@ -32,19 +37,28 @@ stages:
         mysql -uusername -ppassword -e "SHOW DATABASES;"
       displayName: 'Setup MySQL'
 
+
+    # -------------------------------
     # Prepare SonarQube
+    # -------------------------------
+
     - task: SonarQubePrepare@7
       displayName: 'Prepare SonarQube Analysis'
       inputs:
         SonarQube: 'sonarqube-connection'
-        scannerMode: 'other'
-        extraProperties: |
-          sonar.projectKey=snowman
-          sonar.projectName=Snowman
+        scannerMode: 'cli'
+        configMode: 'manual'
+        cliProjectKey: 'snowman'
+        cliProjectName: 'Snowman'
+        cliSources: '.'
 
-    # Maven Build + Test + SonarQube
+
+    # -------------------------------
+    # Maven Build and Test
+    # -------------------------------
+
     - task: Maven@3
-      displayName: 'Maven Build, Test and SonarQube Analysis'
+      displayName: 'Maven Build and Test'
       inputs:
         mavenPomFile: 'pom.xml'
         mavenOptions: '-Xmx3072m'
@@ -53,21 +67,41 @@ stages:
         jdkArchitectureOption: 'x64'
         publishJUnitResults: true
         testResultsFiles: '**/surefire-reports/TEST-*.xml'
-        goals: 'clean verify sonar:sonar'
+        goals: 'clean verify'
 
-    # Publish SonarQube Quality Gate
+
+    # -------------------------------
+    # Run SonarQube Analysis
+    # -------------------------------
+
+    - task: SonarQubeAnalyze@7
+      displayName: 'Run SonarQube Analysis'
+
+
+    # -------------------------------
+    # Publish Quality Gate
+    # -------------------------------
+
     - task: SonarQubePublish@7
       displayName: 'Publish SonarQube Quality Gate'
       inputs:
         pollingTimeoutSec: '300'
 
-    # Check generated files
+
+    # -------------------------------
+    # Check JAR
+    # -------------------------------
+
     - script: |
         echo "Files generated inside target:"
         ls -lh target
       displayName: 'Check JAR'
 
-    # Publish target folder
+
+    # -------------------------------
+    # Publish Artifact
+    # -------------------------------
+
     - task: PublishBuildArtifacts@1
       displayName: 'Publish JAR Artifact'
       inputs:
@@ -76,7 +110,9 @@ stages:
         publishLocation: 'Container'
 
 
-# ================= CD =================
+# =====================================================
+# CD - DEPLOY TO AZURE VM
+# =====================================================
 
 - stage: Deploy
   displayName: 'Deploy to Azure VM'
@@ -90,7 +126,10 @@ stages:
 
     steps:
 
-    # Download artifact
+    # -------------------------------
+    # Download Artifact
+    # -------------------------------
+
     - task: DownloadBuildArtifacts@1
       displayName: 'Download Artifact'
       inputs:
@@ -99,13 +138,21 @@ stages:
         artifactName: 'drop'
         downloadPath: '$(System.ArtifactsDirectory)'
 
-    # Check downloaded files
+
+    # -------------------------------
+    # Check Artifact
+    # -------------------------------
+
     - script: |
         echo "Downloaded files:"
         find "$(System.ArtifactsDirectory)/drop" -type f
       displayName: 'Check Artifact'
 
+
+    # -------------------------------
     # Copy JAR to Azure VM
+    # -------------------------------
+
     - task: CopyFilesOverSSH@0
       displayName: 'Copy JAR to Azure VM'
       inputs:
@@ -115,7 +162,11 @@ stages:
         targetFolder: '/home/azureuser/app'
         overwrite: true
 
-    # Run application on VM
+
+    # -------------------------------
+    # Start Application
+    # -------------------------------
+
     - task: SSH@0
       displayName: 'Run Application on VM'
       inputs:
