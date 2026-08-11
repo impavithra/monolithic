@@ -31,3 +31,9 @@ steps:
     publishJUnitResults: true
     testResultsFiles: '**/surefire-reports/TEST-*.xml'
     goals: 'package'
+
+- script: |
+    echo "===== FAILED TESTS ====="
+    grep -R "<failure\|<error" target/surefire-reports/ || true
+  displayName: 'Show Failed Tests'
+  condition: always()
