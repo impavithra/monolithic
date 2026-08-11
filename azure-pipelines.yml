@@ -7,6 +7,7 @@ pool:
 stages:
 
 # ================= CI =================
+
 - stage: Build
   displayName: 'Build and Test'
 
@@ -31,9 +32,19 @@ stages:
         mysql -uusername -ppassword -e "SHOW DATABASES;"
       displayName: 'Setup MySQL'
 
-    # Maven Build and Test
+    # Prepare SonarQube
+    - task: SonarQubePrepare@7
+      displayName: 'Prepare SonarQube Analysis'
+      inputs:
+        SonarQube: 'sonarqube-connection'
+        scannerMode: 'other'
+        extraProperties: |
+          sonar.projectKey=snowman
+          sonar.projectName=Snowman
+
+    # Maven Build + Test + SonarQube
     - task: Maven@3
-      displayName: 'Maven Build and Test'
+      displayName: 'Maven Build, Test and SonarQube Analysis'
       inputs:
         mavenPomFile: 'pom.xml'
         mavenOptions: '-Xmx3072m'
@@ -42,7 +53,13 @@ stages:
         jdkArchitectureOption: 'x64'
         publishJUnitResults: true
         testResultsFiles: '**/surefire-reports/TEST-*.xml'
-        goals: 'clean package'
+        goals: 'clean verify sonar:sonar'
+
+    # Publish SonarQube Quality Gate
+    - task: SonarQubePublish@7
+      displayName: 'Publish SonarQube Quality Gate'
+      inputs:
+        pollingTimeoutSec: '300'
 
     # Check generated files
     - script: |
@@ -60,8 +77,10 @@ stages:
 
 
 # ================= CD =================
+
 - stage: Deploy
   displayName: 'Deploy to Azure VM'
+
   dependsOn: Build
   condition: succeeded()
 
@@ -86,7 +105,7 @@ stages:
         find "$(System.ArtifactsDirectory)/drop" -type f
       displayName: 'Check Artifact'
 
-    # Copy JAR to VM
+    # Copy JAR to Azure VM
     - task: CopyFilesOverSSH@0
       displayName: 'Copy JAR to Azure VM'
       inputs:
@@ -96,7 +115,7 @@ stages:
         targetFolder: '/home/azureuser/app'
         overwrite: true
 
-    # Run application
+    # Run application on VM
     - task: SSH@0
       displayName: 'Run Application on VM'
       inputs:
@@ -114,3 +133,8 @@ stages:
           nohup java -jar "$JAR" > /home/azureuser/app/app.log 2>&1 &
 
           echo "Application deployed successfully"
+
+          sleep 10
+
+          echo "Application log:"
+          tail -20 /home/azureuser/app/app.log
