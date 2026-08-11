@@ -16,6 +16,7 @@ stages:
 
     steps:
 
+    # Setup MySQL
     - script: |
         sudo systemctl start mysql
 
@@ -30,6 +31,7 @@ stages:
         mysql -uusername -ppassword -e "SHOW DATABASES;"
       displayName: 'Setup MySQL'
 
+    # Maven Build and Test
     - task: Maven@3
       displayName: 'Maven Build and Test'
       inputs:
@@ -42,10 +44,17 @@ stages:
         testResultsFiles: '**/surefire-reports/TEST-*.xml'
         goals: 'clean package'
 
+    # Check generated files
+    - script: |
+        echo "Files generated inside target:"
+        ls -lh target
+      displayName: 'Check JAR'
+
+    # Publish target folder
     - task: PublishBuildArtifacts@1
       displayName: 'Publish JAR Artifact'
       inputs:
-        PathtoPublish: 'target/enterprise-application-1.0-SNAPSHOT-jar-with-dependencies.jar'
+        PathtoPublish: 'target'
         ArtifactName: 'drop'
         publishLocation: 'Container'
 
@@ -62,6 +71,7 @@ stages:
 
     steps:
 
+    # Download artifact
     - task: DownloadBuildArtifacts@1
       displayName: 'Download Artifact'
       inputs:
@@ -70,6 +80,13 @@ stages:
         artifactName: 'drop'
         downloadPath: '$(System.ArtifactsDirectory)'
 
+    # Check downloaded files
+    - script: |
+        echo "Downloaded files:"
+        find "$(System.ArtifactsDirectory)/drop" -type f
+      displayName: 'Check Artifact'
+
+    # Copy JAR to VM
     - task: CopyFilesOverSSH@0
       displayName: 'Copy JAR to Azure VM'
       inputs:
@@ -79,6 +96,7 @@ stages:
         targetFolder: '/home/azureuser/app'
         overwrite: true
 
+    # Run application
     - task: SSH@0
       displayName: 'Run Application on VM'
       inputs:
@@ -86,6 +104,13 @@ stages:
         runOptions: 'inline'
         inline: |
           mkdir -p /home/azureuser/app
+
           pkill -f 'java -jar' || true
-          nohup java -jar /home/azureuser/app/enterprise-application-1.0-SNAPSHOT-jar-with-dependencies.jar > /home/azureuser/app/app.log 2>&1 &
+
+          JAR=$(find /home/azureuser/app -name "*.jar" | head -1)
+
+          echo "Starting: $JAR"
+
+          nohup java -jar "$JAR" > /home/azureuser/app/app.log 2>&1 &
+
           echo "Application deployed successfully"
