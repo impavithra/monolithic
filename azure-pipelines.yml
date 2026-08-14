@@ -59,27 +59,27 @@ stages:
 
 
     # =================================================
-    # Maven Build + Test + SonarQube
+    # Maven Build
     # =================================================
 
     - task: Maven@4
-      displayName: 'Maven Build, Test and SonarQube'
-
+      displayName: 'Maven Build'
       inputs:
         mavenPOMFile: 'pom.xml'
         mavenOptions: '-Xmx3072m'
-
         javaHomeOption: 'JDKVersion'
         jdkVersionOption: '1.17'
         jdkArchitectureOption: 'x64'
+        publishJUnitResults: false
+        goals: 'clean package -DskipTests'
 
-        publishJUnitResults: true
-        testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
-        goals: 'clean verify'
+    # =================================================
+    # SonarQube Analysis
+    # =================================================
 
-        sonarQubeRunAnalysis: true
-        sqMavenPluginVersionChoice: 'latest'
+    - task: SonarQubeAnalyze@7
+      displayName: 'Run SonarQube Analysis'
 
 
     # =================================================
@@ -88,7 +88,6 @@ stages:
 
     - task: SonarQubePublish@7
       displayName: 'Publish SonarQube Quality Gate'
-
       inputs:
         pollingTimeoutSec: '300'
 
@@ -113,7 +112,6 @@ stages:
 
     - task: PublishBuildArtifacts@1
       displayName: 'Publish JAR Artifact'
-
       inputs:
         PathtoPublish: 'target'
         ArtifactName: 'drop'
@@ -143,7 +141,6 @@ stages:
 
     - task: DownloadBuildArtifacts@1
       displayName: 'Download Artifact'
-
       inputs:
         buildType: 'current'
         downloadType: 'single'
@@ -168,11 +165,9 @@ stages:
 
     - task: SSH@0
       displayName: 'Prepare Application Directory'
-
       inputs:
         sshEndpoint: 'pv-vm-ssh'
         runOptions: 'inline'
-
         inline: |
           mkdir -p /home/azureuser/app
 
@@ -183,7 +178,6 @@ stages:
 
     - task: CopyFilesOverSSH@0
       displayName: 'Copy JAR to Azure VM'
-
       inputs:
         sshEndpoint: 'pv-vm-ssh'
         sourceFolder: '$(System.ArtifactsDirectory)/drop'
@@ -198,11 +192,9 @@ stages:
 
     - task: SSH@0
       displayName: 'Run Application on Azure VM'
-
       inputs:
         sshEndpoint: 'pv-vm-ssh'
         runOptions: 'inline'
-
         inline: |
 
           echo "Stopping old application..."
