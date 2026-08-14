@@ -39,48 +39,12 @@ stages:
         mysql -uroot -proot -e "FLUSH PRIVILEGES;"
 
         mysql -uusername -ppassword -e "SHOW DATABASES;"
+
       displayName: 'Setup MySQL'
 
 
     # =================================================
-    # BUILD + TEST USING JAVA 8
-    # =================================================
-
-    - task: Maven@4
-      displayName: 'Maven Build and Test'
-      inputs:
-        mavenPOMFile: 'pom.xml'
-        mavenOptions: '-Xmx3072m'
-
-        javaHomeOption: 'JDKVersion'
-        jdkVersionOption: '1.8'
-        jdkArchitectureOption: 'x64'
-
-        publishJUnitResults: true
-        testResultsFiles: '**/surefire-reports/TEST-*.xml'
-
-        goals: 'clean package'
-
-
-    # =================================================
-    # CHECK GENERATED JAR
-    # =================================================
-
-    - script: |
-        echo "======================================"
-        echo "Generated files"
-        echo "======================================"
-
-        ls -lh target
-
-        echo ""
-        echo "JAR files:"
-        find target -maxdepth 1 -type f -name "*.jar" -print
-      displayName: 'Check Generated JAR'
-
-
-    # =================================================
-    # PREPARE SONARQUBE
+    # Prepare SonarQube
     # =================================================
 
     - task: SonarQubePrepare@7
@@ -95,11 +59,12 @@ stages:
 
 
     # =================================================
-    # SONARQUBE ANALYSIS USING JAVA 17
+    # Maven Build + Test + SonarQube
     # =================================================
 
     - task: Maven@4
-      displayName: 'SonarQube Analysis'
+      displayName: 'Maven Build, Test and SonarQube'
+
       inputs:
         mavenPOMFile: 'pom.xml'
         mavenOptions: '-Xmx3072m'
@@ -108,29 +73,47 @@ stages:
         jdkVersionOption: '1.17'
         jdkArchitectureOption: 'x64'
 
-        publishJUnitResults: false
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
-        goals: 'sonar:sonar'
+        goals: 'clean verify'
 
-        sonarQubeRunAnalysis: false
+        sonarQubeRunAnalysis: true
+        sqMavenPluginVersionChoice: 'latest'
 
 
     # =================================================
-    # PUBLISH SONARQUBE QUALITY GATE
+    # Publish SonarQube Quality Gate
     # =================================================
 
     - task: SonarQubePublish@7
       displayName: 'Publish SonarQube Quality Gate'
+
       inputs:
         pollingTimeoutSec: '300'
 
 
     # =================================================
-    # PUBLISH JAR ARTIFACT
+    # Check JAR
+    # =================================================
+
+    - script: |
+        echo "Generated files:"
+        ls -lh target
+
+        echo "JAR files:"
+        find target -maxdepth 1 -type f -name "*.jar" -print
+
+      displayName: 'Check Generated JAR'
+
+
+    # =================================================
+    # Publish Artifact
     # =================================================
 
     - task: PublishBuildArtifacts@1
       displayName: 'Publish JAR Artifact'
+
       inputs:
         PathtoPublish: 'target'
         ArtifactName: 'drop'
@@ -155,11 +138,12 @@ stages:
     steps:
 
     # =================================================
-    # DOWNLOAD ARTIFACT
+    # Download Artifact
     # =================================================
 
     - task: DownloadBuildArtifacts@1
       displayName: 'Download Artifact'
+
       inputs:
         buildType: 'current'
         downloadType: 'single'
@@ -168,37 +152,38 @@ stages:
 
 
     # =================================================
-    # CHECK ARTIFACT
+    # Check Artifact
     # =================================================
 
     - script: |
-        echo "======================================"
-        echo "Downloaded artifacts"
-        echo "======================================"
-
+        echo "Downloaded artifacts:"
         find "$(System.ArtifactsDirectory)/drop" -type f -print
+
       displayName: 'Check Downloaded Artifact'
 
 
     # =================================================
-    # CREATE APPLICATION DIRECTORY
+    # Prepare VM
     # =================================================
 
     - task: SSH@0
       displayName: 'Prepare Application Directory'
+
       inputs:
         sshEndpoint: 'pv-vm-ssh'
         runOptions: 'inline'
+
         inline: |
           mkdir -p /home/azureuser/app
 
 
     # =================================================
-    # COPY JAR TO AZURE VM
+    # Copy JAR
     # =================================================
 
     - task: CopyFilesOverSSH@0
       displayName: 'Copy JAR to Azure VM'
+
       inputs:
         sshEndpoint: 'pv-vm-ssh'
         sourceFolder: '$(System.ArtifactsDirectory)/drop'
@@ -208,22 +193,17 @@ stages:
 
 
     # =================================================
-    # START APPLICATION
+    # Run Application
     # =================================================
 
     - task: SSH@0
       displayName: 'Run Application on Azure VM'
+
       inputs:
         sshEndpoint: 'pv-vm-ssh'
         runOptions: 'inline'
 
         inline: |
-
-          echo "======================================"
-          echo "Starting application deployment"
-          echo "======================================"
-
-          mkdir -p /home/azureuser/app
 
           echo "Stopping old application..."
 
@@ -231,23 +211,17 @@ stages:
 
           sleep 3
 
-          echo "Available JAR files:"
-
-          ls -lh /home/azureuser/app/*.jar
-
           JAR=$(find /home/azureuser/app \
             -maxdepth 1 \
             -type f \
-            -name "*.jar" \
-            | head -1)
+            -name "*.jar" | head -1)
 
           if [ -z "$JAR" ]; then
             echo "ERROR: JAR file not found!"
             exit 1
           fi
 
-          echo "Starting application:"
-          echo "$JAR"
+          echo "Starting application: $JAR"
 
           nohup java -jar "$JAR" \
             > /home/azureuser/app/app.log 2>&1 &
@@ -256,14 +230,7 @@ stages:
 
           sleep 10
 
-          echo ""
-          echo "======================================"
-          echo "Application log"
-          echo "======================================"
-
+          echo "Application log:"
           tail -30 /home/azureuser/app/app.log
 
-          echo ""
-          echo "======================================"
           echo "Application deployed successfully"
-          echo "======================================"
