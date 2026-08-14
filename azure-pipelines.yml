@@ -7,7 +7,7 @@ pool:
 stages:
 
 # =====================================================
-# CI - BUILD, TEST AND SONARQUBE
+# CI - BUILD, TEST, SONARQUBE
 # =====================================================
 
 - stage: Build
@@ -39,12 +39,48 @@ stages:
         mysql -uroot -proot -e "FLUSH PRIVILEGES;"
 
         mysql -uusername -ppassword -e "SHOW DATABASES;"
-
       displayName: 'Setup MySQL'
 
 
     # =================================================
-    # Prepare SonarQube
+    # BUILD + TEST USING JAVA 8
+    # =================================================
+
+    - task: Maven@4
+      displayName: 'Maven Build and Test'
+      inputs:
+        mavenPOMFile: 'pom.xml'
+        mavenOptions: '-Xmx3072m'
+
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '1.8'
+        jdkArchitectureOption: 'x64'
+
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+
+        goals: 'clean package'
+
+
+    # =================================================
+    # CHECK GENERATED JAR
+    # =================================================
+
+    - script: |
+        echo "======================================"
+        echo "Generated files"
+        echo "======================================"
+
+        ls -lh target
+
+        echo ""
+        echo "JAR files:"
+        find target -maxdepth 1 -type f -name "*.jar" -print
+      displayName: 'Check Generated JAR'
+
+
+    # =================================================
+    # PREPARE SONARQUBE
     # =================================================
 
     - task: SonarQubePrepare@7
@@ -59,31 +95,28 @@ stages:
 
 
     # =================================================
-    # Maven Build + Test + SonarQube
+    # SONARQUBE ANALYSIS USING JAVA 17
     # =================================================
 
     - task: Maven@4
-      displayName: 'Maven Build, Test and SonarQube'
+      displayName: 'SonarQube Analysis'
       inputs:
         mavenPOMFile: 'pom.xml'
-
         mavenOptions: '-Xmx3072m'
 
         javaHomeOption: 'JDKVersion'
-        jdkVersionOption: '1.8'
+        jdkVersionOption: '1.17'
         jdkArchitectureOption: 'x64'
 
-        publishJUnitResults: true
-        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        publishJUnitResults: false
 
-        goals: 'clean verify'
+        goals: 'sonar:sonar'
 
-        sonarQubeRunAnalysis: true
-        sqMavenPluginVersionChoice: 'latest'
+        sonarQubeRunAnalysis: false
 
 
     # =================================================
-    # Publish SonarQube Quality Gate
+    # PUBLISH SONARQUBE QUALITY GATE
     # =================================================
 
     - task: SonarQubePublish@7
@@ -93,25 +126,7 @@ stages:
 
 
     # =================================================
-    # Check generated files
-    # =================================================
-
-    - script: |
-        echo "======================================"
-        echo "Files generated inside target:"
-        echo "======================================"
-
-        ls -lh target
-
-        echo ""
-        echo "JAR files:"
-        find target -maxdepth 1 -type f -name "*.jar" -print
-
-      displayName: 'Check Generated JAR'
-
-
-    # =================================================
-    # Publish JAR Artifact
+    # PUBLISH JAR ARTIFACT
     # =================================================
 
     - task: PublishBuildArtifacts@1
@@ -140,7 +155,7 @@ stages:
     steps:
 
     # =================================================
-    # Download Artifact
+    # DOWNLOAD ARTIFACT
     # =================================================
 
     - task: DownloadBuildArtifacts@1
@@ -153,21 +168,20 @@ stages:
 
 
     # =================================================
-    # Check downloaded artifact
+    # CHECK ARTIFACT
     # =================================================
 
     - script: |
         echo "======================================"
-        echo "Downloaded artifacts:"
+        echo "Downloaded artifacts"
         echo "======================================"
 
         find "$(System.ArtifactsDirectory)/drop" -type f -print
-
       displayName: 'Check Downloaded Artifact'
 
 
     # =================================================
-    # Create application directory
+    # CREATE APPLICATION DIRECTORY
     # =================================================
 
     - task: SSH@0
@@ -180,7 +194,7 @@ stages:
 
 
     # =================================================
-    # Copy JAR to Azure VM
+    # COPY JAR TO AZURE VM
     # =================================================
 
     - task: CopyFilesOverSSH@0
@@ -194,7 +208,7 @@ stages:
 
 
     # =================================================
-    # Start Application
+    # START APPLICATION
     # =================================================
 
     - task: SSH@0
@@ -221,7 +235,11 @@ stages:
 
           ls -lh /home/azureuser/app/*.jar
 
-          JAR=$(find /home/azureuser/app -maxdepth 1 -type f -name "*.jar" | head -1)
+          JAR=$(find /home/azureuser/app \
+            -maxdepth 1 \
+            -type f \
+            -name "*.jar" \
+            | head -1)
 
           if [ -z "$JAR" ]; then
             echo "ERROR: JAR file not found!"
