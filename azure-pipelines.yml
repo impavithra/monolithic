@@ -19,68 +19,72 @@ stages:
 
     steps:
 
-    # -------------------------------
+    # =================================================
     # Setup MySQL
-    # -------------------------------
+    # =================================================
 
     - script: |
         sudo systemctl start mysql
 
-        sudo mysqladmin -u root password 'root'
+        sudo mysqladmin -u root password 'root' || true
 
         mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS snowman;"
+
         mysql -uroot -proot -e "CREATE USER IF NOT EXISTS 'username'@'localhost' IDENTIFIED BY 'password';"
+
         mysql -uroot -proot -e "ALTER USER 'username'@'localhost' IDENTIFIED BY 'password';"
+
         mysql -uroot -proot -e "GRANT ALL PRIVILEGES ON snowman.* TO 'username'@'localhost';"
+
         mysql -uroot -proot -e "FLUSH PRIVILEGES;"
 
         mysql -uusername -ppassword -e "SHOW DATABASES;"
+
       displayName: 'Setup MySQL'
 
 
-    # -------------------------------
+    # =================================================
     # Prepare SonarQube
-    # -------------------------------
+    # =================================================
 
     - task: SonarQubePrepare@7
       displayName: 'Prepare SonarQube Analysis'
       inputs:
         SonarQube: 'sonarqube-connection'
-        scannerMode: 'cli'
-        configMode: 'manual'
-        cliProjectKey: 'snowman'
-        cliProjectName: 'Snowman'
-        cliSources: '.'
+        scannerMode: 'other'
+
+        extraProperties: |
+          sonar.projectKey=snowman
+          sonar.projectName=Snowman
 
 
-    # -------------------------------
-    # Maven Build and Test
-    # -------------------------------
+    # =================================================
+    # Maven Build + Test + SonarQube
+    # =================================================
 
-    - task: Maven@3
-      displayName: 'Maven Build and Test'
+    - task: Maven@4
+      displayName: 'Maven Build, Test and SonarQube'
       inputs:
-        mavenPomFile: 'pom.xml'
+        mavenPOMFile: 'pom.xml'
+
         mavenOptions: '-Xmx3072m'
+
         javaHomeOption: 'JDKVersion'
         jdkVersionOption: '1.8'
         jdkArchitectureOption: 'x64'
+
         publishJUnitResults: true
         testResultsFiles: '**/surefire-reports/TEST-*.xml'
+
         goals: 'clean verify'
 
-
-    # -------------------------------
-    # Run SonarQube Analysis
-    # -------------------------------
-
-    - task: SonarQubeAnalyze@7
-      displayName: 'Run SonarQube Analysis'
+        sonarQubeRunAnalysis: true
+        sqMavenPluginVersionChoice: 'latest'
 
 
-    # -------------------------------
-    # Publish Quality Gate
-    # -------------------------------
+    # =================================================
+    # Publish SonarQube Quality Gate
+    # =================================================
 
     - task: SonarQubePublish@7
       displayName: 'Publish SonarQube Quality Gate'
@@ -88,19 +92,27 @@ stages:
         pollingTimeoutSec: '300'
 
 
-    # -------------------------------
-    # Check JAR
-    # -------------------------------
+    # =================================================
+    # Check generated files
+    # =================================================
 
     - script: |
+        echo "======================================"
         echo "Files generated inside target:"
+        echo "======================================"
+
         ls -lh target
-      displayName: 'Check JAR'
+
+        echo ""
+        echo "JAR files:"
+        find target -maxdepth 1 -type f -name "*.jar" -print
+
+      displayName: 'Check Generated JAR'
 
 
-    # -------------------------------
-    # Publish Artifact
-    # -------------------------------
+    # =================================================
+    # Publish JAR Artifact
+    # =================================================
 
     - task: PublishBuildArtifacts@1
       displayName: 'Publish JAR Artifact'
@@ -121,14 +133,15 @@ stages:
   condition: succeeded()
 
   jobs:
+
   - job: Deploy
     displayName: 'Deploy JAR'
 
     steps:
 
-    # -------------------------------
+    # =================================================
     # Download Artifact
-    # -------------------------------
+    # =================================================
 
     - task: DownloadBuildArtifacts@1
       displayName: 'Download Artifact'
@@ -139,19 +152,36 @@ stages:
         downloadPath: '$(System.ArtifactsDirectory)'
 
 
-    # -------------------------------
-    # Check Artifact
-    # -------------------------------
+    # =================================================
+    # Check downloaded artifact
+    # =================================================
 
     - script: |
-        echo "Downloaded files:"
-        find "$(System.ArtifactsDirectory)/drop" -type f
-      displayName: 'Check Artifact'
+        echo "======================================"
+        echo "Downloaded artifacts:"
+        echo "======================================"
+
+        find "$(System.ArtifactsDirectory)/drop" -type f -print
+
+      displayName: 'Check Downloaded Artifact'
 
 
-    # -------------------------------
+    # =================================================
+    # Create application directory
+    # =================================================
+
+    - task: SSH@0
+      displayName: 'Prepare Application Directory'
+      inputs:
+        sshEndpoint: 'pv-vm-ssh'
+        runOptions: 'inline'
+        inline: |
+          mkdir -p /home/azureuser/app
+
+
+    # =================================================
     # Copy JAR to Azure VM
-    # -------------------------------
+    # =================================================
 
     - task: CopyFilesOverSSH@0
       displayName: 'Copy JAR to Azure VM'
@@ -163,29 +193,59 @@ stages:
         overwrite: true
 
 
-    # -------------------------------
+    # =================================================
     # Start Application
-    # -------------------------------
+    # =================================================
 
     - task: SSH@0
-      displayName: 'Run Application on VM'
+      displayName: 'Run Application on Azure VM'
       inputs:
         sshEndpoint: 'pv-vm-ssh'
         runOptions: 'inline'
+
         inline: |
+
+          echo "======================================"
+          echo "Starting application deployment"
+          echo "======================================"
+
           mkdir -p /home/azureuser/app
+
+          echo "Stopping old application..."
 
           pkill -f 'java -jar' || true
 
-          JAR=$(find /home/azureuser/app -name "*.jar" | head -1)
+          sleep 3
 
-          echo "Starting: $JAR"
+          echo "Available JAR files:"
 
-          nohup java -jar "$JAR" > /home/azureuser/app/app.log 2>&1 &
+          ls -lh /home/azureuser/app/*.jar
 
-          echo "Application deployed successfully"
+          JAR=$(find /home/azureuser/app -maxdepth 1 -type f -name "*.jar" | head -1)
+
+          if [ -z "$JAR" ]; then
+            echo "ERROR: JAR file not found!"
+            exit 1
+          fi
+
+          echo "Starting application:"
+          echo "$JAR"
+
+          nohup java -jar "$JAR" \
+            > /home/azureuser/app/app.log 2>&1 &
+
+          echo $! > /home/azureuser/app/app.pid
 
           sleep 10
 
-          echo "Application log:"
-          tail -20 /home/azureuser/app/app.log
+          echo ""
+          echo "======================================"
+          echo "Application log"
+          echo "======================================"
+
+          tail -30 /home/azureuser/app/app.log
+
+          echo ""
+          echo "======================================"
+          echo "Application deployed successfully"
+          echo "======================================"
