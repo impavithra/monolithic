@@ -19,9 +19,9 @@ stages:
 
     steps:
 
-    # =================================================
+    # -------------------------------
     # Setup MySQL
-    # =================================================
+    # -------------------------------
 
     - script: |
         sudo systemctl start mysql
@@ -43,49 +43,48 @@ stages:
       displayName: 'Setup MySQL'
 
 
-    # =================================================
+    # -------------------------------
     # Prepare SonarQube
-    # =================================================
+    # -------------------------------
 
     - task: SonarQubePrepare@7
       displayName: 'Prepare SonarQube Analysis'
       inputs:
         SonarQube: 'sonarqube-connection'
         scannerMode: 'other'
-
         extraProperties: |
           sonar.projectKey=snowman
           sonar.projectName=Snowman
 
 
-    # =================================================
+    # -------------------------------
     # Maven Build
-    # =================================================
+    # -------------------------------
 
     - task: Maven@4
-      displayName: 'Maven Build and Test'
+      displayName: 'Maven Build'
       inputs:
-          mavenPOMFile: 'pom.xml'
-          mavenOptions: '-Xmx3072m'
-          javaHomeOption: 'JDKVersion'
-          jdkVersionOption: '1.8'
-          jdkArchitectureOption: 'x64'
-          publishJUnitResults: true
-          testResultsFiles: '**/surefire-reports/TEST-*.xml'
-          goals: 'clean verify'
+        mavenPOMFile: 'pom.xml'
+        mavenOptions: '-Xmx3072m'
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '1.17'
+        jdkArchitectureOption: 'x64'
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        goals: 'clean package -DskipTests'
 
 
-    # =================================================
+    # -------------------------------
     # SonarQube Analysis
-    # =================================================
+    # -------------------------------
 
     - task: SonarQubeAnalyze@7
-      displayName: 'Run SonarQube Analysis'
+      displayName: 'SonarQube Analysis'
 
 
-    # =================================================
-    # Publish SonarQube Quality Gate
-    # =================================================
+    # -------------------------------
+    # SonarQube Quality Gate
+    # -------------------------------
 
     - task: SonarQubePublish@7
       displayName: 'Publish SonarQube Quality Gate'
@@ -93,28 +92,52 @@ stages:
         pollingTimeoutSec: '300'
 
 
-    # =================================================
-    # Check JAR
-    # =================================================
+    # -------------------------------
+    # Verify JAR
+    # -------------------------------
 
     - script: |
-        echo "Generated files:"
+        echo "======================================"
+        echo "TARGET DIRECTORY"
+        echo "======================================"
+
         ls -lh target
 
-        echo "JAR files:"
-        find target -maxdepth 1 -type f -name "*.jar" -print
+        echo ""
+        echo "======================================"
+        echo "Snowman.jar"
+        echo "======================================"
 
-      displayName: 'Check Generated JAR'
+        if [ ! -f target/Snowman.jar ]; then
+          echo "ERROR: target/Snowman.jar not found!"
+          exit 1
+        fi
+
+        ls -lh target/Snowman.jar
+
+      displayName: 'Verify Snowman JAR'
 
 
-    # =================================================
-    # Publish Artifact
-    # =================================================
+    # -------------------------------
+    # Create deployment artifact
+    # -------------------------------
+
+    - task: CopyFiles@2
+      displayName: 'Prepare Deployment Artifact'
+      inputs:
+        SourceFolder: '$(Build.SourcesDirectory)/target'
+        Contents: 'Snowman.jar'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)/drop'
+
+
+    # -------------------------------
+    # Publish ONLY Snowman.jar
+    # -------------------------------
 
     - task: PublishBuildArtifacts@1
-      displayName: 'Publish JAR Artifact'
+      displayName: 'Publish Snowman JAR'
       inputs:
-        PathtoPublish: 'target'
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/drop'
         ArtifactName: 'drop'
         publishLocation: 'Container'
 
@@ -132,13 +155,13 @@ stages:
   jobs:
 
   - job: Deploy
-    displayName: 'Deploy JAR'
+    displayName: 'Deploy Snowman Application'
 
     steps:
 
-    # =================================================
-    # Download Artifact
-    # =================================================
+    # -------------------------------
+    # Download artifact
+    # -------------------------------
 
     - task: DownloadBuildArtifacts@1
       displayName: 'Download Artifact'
@@ -149,36 +172,59 @@ stages:
         downloadPath: '$(System.ArtifactsDirectory)'
 
 
-    # =================================================
-    # Check Artifact
-    # =================================================
+    # -------------------------------
+    # Verify downloaded artifact
+    # -------------------------------
 
     - script: |
-        echo "Downloaded artifacts:"
+        echo "======================================"
+        echo "DOWNLOADED ARTIFACT"
+        echo "======================================"
+
         find "$(System.ArtifactsDirectory)/drop" -type f -print
 
-      displayName: 'Check Downloaded Artifact'
+        echo ""
+        echo "Checking Snowman.jar..."
+
+        if [ ! -f "$(System.ArtifactsDirectory)/drop/Snowman.jar" ]; then
+          echo "ERROR: Snowman.jar not found in artifact!"
+          exit 1
+        fi
+
+        ls -lh "$(System.ArtifactsDirectory)/drop/Snowman.jar"
+
+      displayName: 'Verify Downloaded Snowman JAR'
 
 
-    # =================================================
+    # -------------------------------
     # Prepare VM
-    # =================================================
+    # -------------------------------
 
     - task: SSH@0
-      displayName: 'Prepare Application Directory'
+      displayName: 'Prepare VM'
       inputs:
         sshEndpoint: 'pv-vm-ssh'
         runOptions: 'inline'
         inline: |
+          echo "Cleaning old application..."
+
           mkdir -p /home/azureuser/app
 
+          pkill -f 'Snowman.jar' || true
 
-    # =================================================
-    # Copy JAR
-    # =================================================
+          rm -f /home/azureuser/app/*.jar
+          rm -f /home/azureuser/app/app.log
+          rm -f /home/azureuser/app/app.pid
+
+          echo "VM prepared."
+
+
+    # -------------------------------
+    # Copy ONLY Snowman.jar
+    # -------------------------------
 
     - task: CopyFilesOverSSH@0
-      displayName: 'Copy JAR to Azure VM'
+      displayName: 'Copy Snowman JAR to Azure VM'
       inputs:
         sshEndpoint: 'pv-vm-ssh'
         sourceFolder: '$(System.ArtifactsDirectory)/drop'
@@ -187,34 +233,32 @@ stages:
         overwrite: true
 
 
-    # =================================================
-    # Run Application
-    # =================================================
+    # -------------------------------
+    # Start application
+    # -------------------------------
 
     - task: SSH@0
-      displayName: 'Run Application on Azure VM'
+      displayName: 'Start Snowman Application'
       inputs:
         sshEndpoint: 'pv-vm-ssh'
         runOptions: 'inline'
         inline: |
 
-          echo "Stopping old application..."
+          echo "======================================"
+          echo "STARTING SNOWMAN APPLICATION"
+          echo "======================================"
 
-          pkill -f 'java -jar' || true
+          JAR="/home/azureuser/app/Snowman.jar"
 
-          sleep 3
-
-          JAR=$(find /home/azureuser/app \
-            -maxdepth 1 \
-            -type f \
-            -name "*.jar" | head -1)
-
-          if [ -z "$JAR" ]; then
-            echo "ERROR: JAR file not found!"
+          if [ ! -f "$JAR" ]; then
+            echo "ERROR: Snowman.jar not found!"
             exit 1
           fi
 
-          echo "Starting application: $JAR"
+          echo "JAR found:"
+          ls -lh "$JAR"
+
+          echo "Starting application..."
 
           nohup java -jar "$JAR" \
             > /home/azureuser/app/app.log 2>&1 &
@@ -223,7 +267,24 @@ stages:
 
           sleep 10
 
-          echo "Application log:"
-          tail -30 /home/azureuser/app/app.log
+          echo ""
+          echo "======================================"
+          echo "APPLICATION LOG"
+          echo "======================================"
 
-          echo "Application deployed successfully"
+          cat /home/azureuser/app/app.log
+
+          echo ""
+          echo "======================================"
+          echo "PROCESS"
+          echo "======================================"
+
+          if ps -p $(cat /home/azureuser/app/app.pid) > /dev/null 2>&1; then
+            echo "Application is RUNNING"
+          else
+            echo "ERROR: Application failed to start"
+            exit 1
+          fi
+
+          echo ""
+          echo "Application deployed successfully."
