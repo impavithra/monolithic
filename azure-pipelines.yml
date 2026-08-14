@@ -63,15 +63,16 @@ stages:
     # =================================================
 
     - task: Maven@4
-      displayName: 'Maven Build'
+      displayName: 'Maven Build and Test'
       inputs:
-        mavenPOMFile: 'pom.xml'
-        mavenOptions: '-Xmx3072m'
-        javaHomeOption: 'JDKVersion'
-        jdkVersionOption: '1.17'
-        jdkArchitectureOption: 'x64'
-        publishJUnitResults: false
-        goals: 'clean package -DskipTests'
+          mavenPOMFile: 'pom.xml'
+          mavenOptions: '-Xmx3072m'
+          javaHomeOption: 'JDKVersion'
+          jdkVersionOption: '1.8'
+          jdkArchitectureOption: 'x64'
+          publishJUnitResults: true
+          testResultsFiles: '**/surefire-reports/TEST-*.xml'
+          goals: 'clean verify'
 
 
     # =================================================
