@@ -7,6 +7,7 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -20,6 +21,18 @@ pipeline {
                     mvn -version
                     mvn clean test
                 '''
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube-Connection') {
+                    sh '''
+                        mvn sonar:sonar \
+                          -Dsonar.projectKey=snowman-ci-cd \
+                          -Dsonar.projectName=snowman-ci-cd
+                    '''
+                }
             }
         }
     }
