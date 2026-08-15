@@ -265,20 +265,6 @@
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                 </configuration>
-                <executions>
-                    <execution>
-                        <id>compile-integration-test</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>testCompile</goal>
-                        </goals>
-                        <configuration>
-                            <testIncludes>
-                                <testInclude>**/*ITest.java</testInclude>
-                            </testIncludes>
-                        </configuration>
-                    </execution>
-                </executions>
             </plugin>
 
             <plugin>
